@@ -49,7 +49,7 @@ library(ggplot2)         # for plotting
 
 ## 1. Import Climate Variables
 
-Climate variables are needed to create the suitability of species. 
+Thanks to the functions `worldclim_country` and `cmip6_world` from the `geodata` R package, we can download bioclimatic variables for both the present and the future
 
 ```r
 # download current and future climate data for South Africa
@@ -62,25 +62,24 @@ BIO_future <- crop(BIO_future_global, BIO_current)
 
 ## 2. Select Bioclimatic Variables
 
-Just a subset as example
-
+We select just a subset of the variables, as an example. 
 ```r
 # select variables of interest: bio1 (temperature), bio12 (precipitation), bio15 (seasonality)
-BIO_current_sub <- BIO_current[[c("wc2.1_30s_bio_1", "wc2.1_30s_bio_12", "wc2.1_30s_bio_15")]]
-BIO_future_sub  <- BIO_future[[c("bio01", "bio12", "bio15")]]
+BIO_current <- BIO_current[[c("wc2.1_30s_bio_1", "wc2.1_30s_bio_12", "wc2.1_30s_bio_15")]]
+BIO_future  <- BIO_future[[c("bio01", "bio12", "bio15")]]
 
 # rename layers for consistency
-names(BIO_current_sub) <- names(BIO_future_sub) <- c("bio1", "bio12", "bio15")
+names(BIO_current) <- names(BIO_future) <- c("bio1", "bio12", "bio15")
 
 # plot one of the climate variables for inspection
-plot(BIO_current_sub[["bio1"]])
+plot(BIO_current[["bio1"]])
 ```
 
 ## 3. Define Response Functions and Generate Virtual Species
-Virtual species are... and their response functions to the environment can be customized  to create a suitability map that we will use... 
-
+Virtual species are... and their response functions to the environment can be customized to create a suitability map that we will use... 
+Each species respond differently to each environmental factor, according to their requirements. Here, we simulate 3 types of species... 
 ```r
-# define Gaussian response curves for 3 virtual species
+# define Gaussian response curves for 3 virtual species and for each variable
 curve_list <- list(
   formatFunctions(bio1 = c(fun = 'dnorm', mean = 15, sd = 2),  
                   bio12 = c(fun = 'dnorm', mean = 800, sd = 200),  
@@ -97,8 +96,8 @@ curve_list <- list(
 species_current <- list()
 species_future  <- list()
 for (i in 1:3) {
-  species_current[[paste0("species_", i)]] <- generateSpFromFun(raster.stack = BIO_current_sub, parameters = curve_list[[i]], rescale = FALSE)
-  species_future[[paste0("species_", i)]]  <- generateSpFromFun(raster.stack = BIO_future_sub,  parameters = curve_list[[i]], rescale = FALSE)
+  species_current[[paste0("species_", i)]] <- generateSpFromFun(raster.stack = BIO_current, parameters = curve_list[[i]], rescale = FALSE)
+  species_future[[paste0("species_", i)]]  <- generateSpFromFun(raster.stack = BIO_future,  parameters = curve_list[[i]], rescale = FALSE)
 }
 ```
 

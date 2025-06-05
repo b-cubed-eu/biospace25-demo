@@ -18,7 +18,7 @@ To observe species suitability over multiple species and time periods, we develo
 In this tutorial, we outline the steps to create a `stars` object with three dimensions: time, space (represented as grid cells), and species, with suitability as the main attribute.
 
 We:
-1. Download **bioclimatic variables** for South Africa from WorldClim (current) and CMIP6 (future).
+1. Download **bioclimatic variables** for Madagascar from WorldClim (current) and CMIP6 (future).
 2. Select three relevant variables: annual mean temperature (`bio1`), annual precipitation (`bio12`), and precipitation seasonality (`bio15`).
 3. Define response curves for **three virtual species**, each with distinct ecological preferences.
 4. Generate **suitability maps** for each species under both present (2020) and future (2070) climate conditions.
@@ -36,7 +36,6 @@ The code implementation follows this exact logic, using `terra`, `virtualspecies
 The final output is a unified, three-dimensional `stars` object that is well suited for exploratory analysis, visualization, and integration into biodiversity decision-support tools.
 
 ---
-
 ### 0. Load Libraries
 ``` r
 library(terra)          # for raster data handling
@@ -72,27 +71,11 @@ BIO_future_sub  <- BIO_future[[c("bio01", "bio12", "bio15")]]
 
 # rename for simplicity
 names(BIO_current_sub) <- names(BIO_future_sub) <- c("bio1", "bio12", "bio15")
+```
+### 2. Create virtual species 
+Let's create 3 virtual species: each of them has their own response functions to the variables. 
 
-library(viridis)
-
-# Trova min e max globali tra i due raster
-prec_min <- min(minmax(BIO_current_sub[[2]])[1], minmax(BIO_future_sub[[2]])[1])
-prec_max <- max(minmax(BIO_current_sub[[2]])[2], minmax(BIO_future_sub[[2]])[2])
-
-# Crea una palette viridis con valori costanti
-pal <- viridis(100)
-
-# Visualizza con la stessa scala di colori
-par(mfrow = c(2, 1), mar = c(4, 4, 2, 5))  # spazio per legenda
-plot(BIO_current_sub[[2]], main = "Current Annual Precipitation (bio12)",
-     col = pal, zlim = c(prec_min, prec_max))
-plot(BIO_future_sub[[2]], main = "Future Annual Precipitation (bio12)",
-     col = pal, zlim = c(prec_min, prec_max))
-
-
-# =========================================================
-# 3. Define Virtual Species via Ecological Preferences
-# =========================================================
+```
 # Each species has a Gaussian response curve to each variable.
 # These represent:
 # - Species 1: Temperate generalist
@@ -119,10 +102,10 @@ curve_list <- list(
     bio15 = c(fun = 'dnorm', mean = 40, sd = 8)
   )
 )
-
-# =========================================================
-# 4. Generate Virtual Species Suitability (Current & Future)
-# =========================================================
+```
+### 3. Generate Virtual Species Suitability (Current & Future)
+Taking as input the bioclimatic variables we downloaded before and the response functions, `generateSpFromFun` creates the suitability map for each of them in the present and in the future. 
+``` r
 species_current <- list()
 species_future  <- list()
 
@@ -138,10 +121,13 @@ for (i in 1:3) {
     rescale = FALSE
   )
 }
+```
+### 4. Create Regular Grid Over Madagascar 
+We want to incorporate the 3 species into the same object.
 
-# =========================================================
-# 5. Create Regular Grid Over Madagascar
-# =========================================================
+To do so, we need to collapse the x and y spatial dimensions into one, creating a grid that represents individual cells within the study area. This grid allows us to reduce the dimensions and facilitates the transition to a vector data cube.
+
+``` r
 madagascar_shape <- gadm("Madagascar", level = 0, path = tempdir())
 
 # Create a hexagonal grid with 0.9° spacing
@@ -153,28 +139,30 @@ mad_grid <- st_make_grid(
 ) %>%
   st_as_sf() %>%
   mutate(cell_id = 1:n())
+```
+### 5. Aggregate Suitability Over Spatial Grid 
 
-# =========================================================
-# 6. Aggregate Suitability Over Spatial Grid
-# =========================================================
+Species' suitability maps are grouped into two stars objects: the first is related to the present, the second to the future. Then, pixels in the suitability rasters are grouped based on their spatial intersection with a geometry (the grid). Each group is then reduced to a single value using an aggregation function, such as the mean or maximum. The result is a one-dimensional sequence of feature geometries defined in space.
+
+``` r
 suitability_aggregated <- list()
 
 for (i in 1:3) {
   sp <- paste0("species_", i)
   
-  # Convert terra raster to stars object
+  # convert terra raster to stars object
   r_2020 <- st_as_stars(species_current[[sp]]$suitab.raster)
   r_2070 <- st_as_stars(species_future[[sp]]$suitab.raster)
   
-  # Aggregate mean suitability over each cell of the grid
+  # aggregate mean suitability over each cell of the grid
   suitability_aggregated[[paste0(sp, "_2020")]] <- aggregate(r_2020, mad_grid, FUN = mean, na.rm = TRUE)
   suitability_aggregated[[paste0(sp, "_2070")]] <- aggregate(r_2070, mad_grid, FUN = mean, na.rm = TRUE)
 }
-
-# =========================================================
-# 7. Build Suitability Data Cube (stars)
-# =========================================================
-# Combine species into stars objects for each time period
+```
+### 6. Build Suitability Data Cube (stars)
+Now that we have the suitability aggregated over polygons, we recombine into two data cubes (present and future). Finally, species dimension and time dimension are set. We have one object that contains everything we need to explore suitability changes in community. 
+```  r
+# combine species into stars objects for each time period
 current_cube <- c(
   suitability_aggregated$species_1_2020,
   suitability_aggregated$species_2_2020,
@@ -200,10 +188,10 @@ suitability_cube <- c(current_cube, future_cube, along = list(time = c(2020, 207
 # Set final dimension names
 suitability_cube <- st_set_dimensions(suitability_cube, 1, names = "cell")
 names(suitability_cube) <- "suitability"
-
-# =========================================================
-# 8. Explore and Visualize the Data Cube
-# =========================================================
+```
+### 7. Explore and Visualize the Data Cube
+ We have one object that contains everything we need to explore suitability changes in community. 
+``` r
 print(suitability_cube)
 
 ggplot() +
